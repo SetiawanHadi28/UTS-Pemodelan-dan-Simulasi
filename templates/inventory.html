@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi Inventori Minimarket</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <div class="mb-4 text-center">
+            <h1 class="fw-bold text-primary">Simulasi Sistem Dinamik Stok Minimarket</h1>
+            <p class="text-muted">Atur parameter untuk menghitung simulasi.</p>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-5">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Parameter Simulasi</h5>
+                        <form method="POST">
+                            {% set p = params %}
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label">Durasi (hari)</label>
+                                    <input class="form-control" type="number" name="days" min="30" max="365" value="{{ p.days }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Stok awal</label>
+                                    <input class="form-control" type="number" name="initial_stock" min="0" value="{{ p.initial_stock }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Reorder point</label>
+                                    <input class="form-control" type="number" name="reorder_point" min="0" value="{{ p.reorder_point }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Jumlah restock</label>
+                                    <input class="form-control" type="number" name="reorder_qty" min="1" value="{{ p.reorder_qty }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Permintaan rata-rata</label>
+                                    <input class="form-control" type="number" name="mean_demand" min="1" value="{{ p.mean_demand }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Standar deviasi permintaan</label>
+                                    <input class="form-control" type="number" step="0.1" name="demand_std" min="0" value="{{ p.demand_std }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Lead time (hari)</label>
+                                    <input class="form-control" type="number" name="lead_time" min="1" value="{{ p.lead_time }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Seed acak</label>
+                                    <input class="form-control" type="number" name="seed" min="0" value="{{ p.seed }}">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary w-100 mt-3" type="submit">Hitung Simulasi</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                {% if not submitted %}
+                <div class="alert alert-info shadow-sm h-100">Masukkan parameter lalu klik <strong>Hitung Simulasi</strong> untuk menampilkan ringkasan.</div>
+                {% else %}
+                <div class="row g-3">
+                    {% for title, value in summary.items() %}
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 bg-white shadow-sm">
+                            <p class="text-muted mb-1 small">{{ title }}</p>
+                            <h4 class="mb-0">{{ value }}</h4>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if submitted %}
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Contoh 20 titik hasil simulasi</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Hari</th>
+                                <th>Stok tersedia</th>
+                                <th>Kedatangan</th>
+                                <th>Permintaan</th>
+                                <th>Order</th>
+                                <th>Backlog</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in sample %}
+                            <tr>
+                                <td>{{ row["Hari"] }}</td>
+                                <td>{{ row["Stok tersedia"] }}</td>
+                                <td>{{ row["Kedatangan barang"] }}</td>
+                                <td>{{ row["Permintaan"] }}</td>
+                                <td>{{ row["Order ditempatkan"] }}</td>
+                                <td>{{ row["Backlog"] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Grafik stok vs backlog</h5>
+                <canvas id="inventoryChart" height="120"></canvas>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h5 class="card-title">Grafik skenario pertumbuhan stok</h5>
+                <canvas id="scenarioChart" height="120"></canvas>
+            </div>
+        </div>
+        {% endif %}
+
+        <footer class="text-center text-muted my-4">
+            Dibuat untuk tugas UTS Pemodelan &amp; Simulasi.
+        </footer>
+    </div>
+
+    {% if submitted %}
+    <script>
+        const chartData = {{ chart_data|tojson }};
+        const labels = chartData.map(item => item["Hari"]);
+        const stock = chartData.map(item => item["Stok tersedia"]);
+        const backlog = chartData.map(item => item["Backlog"]);
+
+        const ctx = document.getElementById("inventoryChart");
+        new Chart(ctx, {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: "Stok tersedia",
+                        data: stock,
+                        borderColor: "#2563eb",
+                        tension: 0.2
+                    },
+                    {
+                        label: "Backlog",
+                        data: backlog,
+                        borderColor: "#f97316",
+                        tension: 0.2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { title: { display: true, text: "Unit" } },
+                    x: { title: { display: true, text: "Hari" } }
+                }
+            }
+        });
+    </script>
+
+    <script>
+        const scenarioChartData = {{ scenario_chart|tojson }};
+        const scenarioCtx = document.getElementById("scenarioChart");
+        new Chart(scenarioCtx, {
+            type: "line",
+            data: {
+                labels: scenarioChartData.labels,
+                datasets: scenarioChartData.datasets.map((dataset, index) => ({
+                    ...dataset,
+                    borderColor: ["#2563eb", "#22c55e", "#f97316", "#9333ea"][index % 4],
+                    tension: 0.2,
+                    fill: false,
+                })),
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "top" } },
+                scales: {
+                    y: { title: { display: true, text: "Unit" } },
+                    x: { title: { display: true, text: "Hari" } },
+                },
+            },
+        });
+    </script>
+    {% endif %}
+</body>
+
+</html>
+
